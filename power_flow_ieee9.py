@@ -7,11 +7,11 @@ def clear_screen():
 def power_flow():
     clear_screen()
     print("====================================================")
-    print("Cálculo de Fluxo de Potência - IEEE 9 Bus System")
-    print("Método: Newton-Raphson")
+    print("Calculo de Fluxo de Potencia - IEEE 9 Bus System")
+    print("Metodo: Newton-Raphson")
     print("====================================================\n")
 
-    # 1. Configurações do Sistema
+    # 1. Configuracoes do Sistema
     base_mva = 100.0
     max_iter = 20
     tolerance = 1e-6
@@ -47,7 +47,7 @@ def power_flow():
 
     num_buses = len(bus_data)
     
-    # 4. Construção da Matriz Ybus
+    # 4. Construcao da Matriz Ybus
     Ybus = np.zeros((num_buses, num_buses), dtype=complex)
     for line in line_data:
         f = int(line[0]) - 1
@@ -64,7 +64,7 @@ def power_flow():
         Ybus[f, t] -= y
         Ybus[t, f] -= y
 
-    # 5. Inicialização de Variáveis
+    # 5. Inicializacao de Variaveis
     V = bus_data[:, 2].copy()
     theta = np.radians(bus_data[:, 3].copy())
     P_spec = (bus_data[:, 4] - bus_data[:, 6]) / base_mva
@@ -77,7 +77,7 @@ def power_flow():
     
     non_slack_idx = np.concatenate([pv_idx, pq_idx])
     
-    # 6. Iterações de Newton-Raphson
+    # 6. Iteracoes de Newton-Raphson
     for iteration in range(max_iter):
         # Calcular P e Q calculados
         P_calc = np.zeros(num_buses)
@@ -90,20 +90,16 @@ def power_flow():
                 Q_calc[i] += V[i] * V[j] * (Ybus[i, j].real * np.sin(theta[i] - theta[j]) - 
                                            Ybus[i, j].imag * np.cos(theta[i] - theta[j]))
         
-        # Calcular resíduos
+        # Calcular residuos
         dP = P_spec[non_slack_idx] - P_calc[non_slack_idx]
         dQ = Q_spec[pq_idx] - Q_calc[pq_idx]
         
         mismatch = np.concatenate([dP, dQ])
         if np.max(np.abs(mismatch)) < tolerance:
-            print(f"Convergência atingida em {iteration} iterações.\n")
+            print(f"Convergencia atingida em {iteration} iteracoes.\n")
             break
             
-        # 7. Construção da Matriz Jacobiana
-        # J = [[H, N], [M, L]]
-        # H = dP/dtheta, N = dP/dV, M = dQ/dtheta, L = dQ/dV
-        
-        # Índices para a Jacobiana
+        # 7. Construcao da Matriz Jacobiana
         n_ns = len(non_slack_idx)
         n_pq = len(pq_idx)
         J = np.zeros((n_ns + n_pq, n_ns + n_pq))
@@ -147,19 +143,18 @@ def power_flow():
         # Resolver sistema linear
         dx = np.linalg.solve(J, mismatch)
         
-        # Atualizar variáveis
+        # Atualizar variaveis
         theta[non_slack_idx] += dx[:n_ns]
         V[pq_idx] += dx[n_ns:]
     else:
-        print("O método não convergiu no número máximo de iterações.")
+        print("O metodo nao convergiu no numero maximo de iteracoes.")
 
-    # 8. Resultados Finais
-    print("Resultados do Fluxo de Potência:")
-    print("-" * 65)
-    print(f"{'Bus':<5} {'V (pu)':<10} {'Ângulo (deg)':<15} {'P (MW)':<12} {'Q (MVAr)':<12}")
-    print("-" * 65)
+    # 8. Resultados de Tensao e Potencia nos Barramentos
+    print("Resultados dos Barramentos:")
+    print("-" * 75)
+    print(f"{'Barra':<7} {'V (pu)':<10} {'Angulo (deg)':<15} {'P (MW)':<12} {'Q (MVAr)':<12}")
+    print("-" * 75)
     
-    # Recalcular P e Q para todos os barramentos para exibição
     P_final = np.zeros(num_buses)
     Q_final = np.zeros(num_buses)
     for i in range(num_buses):
@@ -169,8 +164,46 @@ def power_flow():
             Q_final[i] += V[i] * V[j] * (Ybus[i, j].real * np.sin(theta[i] - theta[j]) - 
                                        Ybus[i, j].imag * np.cos(theta[i] - theta[j]))
         
-        print(f"{i+1:<5} {V[i]:<10.4f} {np.degrees(theta[i]):<15.4f} {P_final[i]*base_mva:<12.4f} {Q_final[i]*base_mva:<12.4f}")
-    print("-" * 65)
+        print(f"{i+1:<7} {V[i]:<10.4f} {np.degrees(theta[i]):<15.4f} {P_final[i]*base_mva:<12.4f} {Q_final[i]*base_mva:<12.4f}")
+    print("-" * 75 + "\n")
+
+    # 9. Fluxo de Potencia nas Linhas
+    print("Fluxo de Potencia nas Linhas:")
+    print("-" * 75)
+    print(f"{'De':<5} {'Para':<7} {'P (MW)':<15} {'Q (MVAr)':<15} {'Perdas P (MW)':<15}")
+    print("-" * 75)
+
+    for line in line_data:
+        f = int(line[0]) - 1
+        t = int(line[1]) - 1
+        r = line[2]
+        x = line[3]
+        b_half = line[4]
+        
+        z = r + 1j*x
+        y = 1/z
+        y_sh = 1j * b_half
+        
+        # Tensoes complexas
+        Vf = V[f] * (np.cos(theta[f]) + 1j * np.sin(theta[f]))
+        Vt = V[t] * (np.cos(theta[t]) + 1j * np.sin(theta[t]))
+        
+        # Corrente de f para t
+        If_t = (Vf - Vt) * y + Vf * y_sh
+        # Corrente de t para f
+        It_f = (Vt - Vf) * y + Vt * y_sh
+        
+        # Potencia complexa de f para t
+        Sf_t = Vf * np.conj(If_t) * base_mva
+        # Potencia complexa de t para f
+        St_f = Vt * np.conj(It_f) * base_mva
+        
+        # Perdas na linha
+        losses = Sf_t + St_f
+        
+        print(f"{f+1:<5} {t+1:<7} {Sf_t.real:<15.4f} {Sf_t.imag:<15.4f} {losses.real:<15.4f}")
+        print(f"{t+1:<5} {f+1:<7} {St_f.real:<15.4f} {St_f.imag:<15.4f} {'-':<15}")
+        print("-" * 75)
 
 if __name__ == "__main__":
     power_flow()
